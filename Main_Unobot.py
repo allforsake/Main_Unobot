@@ -1,12 +1,18 @@
+import pytz
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import openpyxl
 from openpyxl import Workbook
 import os
+from dotenv import load_dotenv
+from card import *
 
-TOKEN = "7519116906:AAFafU4Z00Cyww1RXVvvluLGn11HGjrc7GA"
+load_dotenv()
+
+TOKEN = os.getenv('TOKEN')
 
 STATS_FILE = 'uno_game_stats.xlsx'
+MIN_PLAYERS_COUNT = 2
 
 # Якщо файл не існує, створюємо новий
 if not os.path.exists(STATS_FILE):
@@ -36,7 +42,7 @@ def save_game_stats(player_id, game_id, stats):
 
 async def send_private_message(user_id, text):
     try:
-        await application.bot.send_message(chat_id=user_id, text=text)
+        await app.bot.send_message(chat_id=user_id, text=text)
     except:
         pass
 
@@ -76,18 +82,18 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     game = get_game(chat_id)
-    if chat_id in games and len(games[chat_id]["players"]) < 4:
+    if chat_id in games and len(games[chat_id]["players"]) < MIN_PLAYERS_COUNT:
         await update.message.reply_text("Not enough players to start the game, need at least 4 players to start.")
         return
         game['turn_order'] = list(game['players'])
-    await update.message.reply_text(START_TEXT)
-    if chat_id in games and len(games[chat_id]["players"]) > 4:
-    await update.message.reply_text("Game started!")
+    await update.message.reply_text("START_TEXT")
+    if chat_id in games and len(games[chat_id]["players"]) >= MIN_PLAYERS_COUNT:
+        await update.message.reply_text("Game started!")
 
     # Send instructions to each player privately
     for player_id in game['players']:
         await send_private_message(player_id,
-    START_TEXT = "Follow these steps:"
+            "Follow these steps:"
             "1️⃣ Add this bot to a group"
             "2️⃣ In the group, start a new game with /new or join an already running game with /join"
             "3️⃣ After at least two players have joined, start the game with /start"
@@ -150,15 +156,15 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # Bot Setup
-app = Application.builder().token(TOKEN).build()
+app = ApplicationBuilder().token(TOKEN).build()
 app.job_queue.scheduler.configure(timezone=pytz.UTC)
-application.add_handler(CommandHandler("new", new_game))
-application.add_handler(CommandHandler("join", join_game))
-application.add_handler(CommandHandler("start", start_game))
-application.add_handler(CommandHandler("leave", leave_game))
-application.add_handler(CommandHandler("turn_order", turn_order))
-application.add_handler(CommandHandler("settings", settings))
-application.add_handler(CommandHandler("stats", stats))
+app.add_handler(CommandHandler("new", new))
+app.add_handler(CommandHandler("join", join))
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("leave", leave_game))
+app.add_handler(CommandHandler("turn_order", turn_order))
+app.add_handler(CommandHandler("settings", settings))
+app.add_handler(CommandHandler("stats", stats))
 
 if __name__ == '__main__':
-    application.run_polling()
+    app.run_polling()
