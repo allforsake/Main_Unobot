@@ -4,7 +4,8 @@ import openpyxl
 from openpyxl import Workbook
 import os
 
-# Створення Excel файлу для статистики
+TOKEN = "7519116906:AAFafU4Z00Cyww1RXVvvluLGn11HGjrc7GA"
+
 STATS_FILE = 'uno_game_stats.xlsx'
 
 # Якщо файл не існує, створюємо новий
@@ -40,7 +41,7 @@ async def send_private_message(user_id, text):
         pass
 
 # Command Handlers
-async def new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def new(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     if chat_id in games:
@@ -56,7 +57,7 @@ async def new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     await update.message.reply_text("New UNO game created! Use /join to participate.")
 
-async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     game = get_game(chat_id)
@@ -72,32 +73,34 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("You already joined.")
 
-async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat_id
     game = get_game(chat_id)
-    if not game or len(game['players']) < 2:
-        await update.message.reply_text("Need at least 2 players to start.")
+    if chat_id in games and len(games[chat_id]["players"]) < 4:
+        await update.message.reply_text("Not enough players to start the game, need at least 4 players to start.")
         return
-    game['turn_order'] = list(game['players'])  # simple order for now
+        game['turn_order'] = list(game['players'])
+    await update.message.reply_text(START_TEXT)
+    if chat_id in games and len(games[chat_id]["players"]) > 4:
     await update.message.reply_text("Game started!")
 
     # Send instructions to each player privately
     for player_id in game['players']:
-        await send_private_message(player_id, 
-            "Follow these steps:\n\n"
-            "1️⃣ Add this bot to a group\n"
-            "2️⃣ In the group, start a new game with /new or join an already running game with /join\n"
-            "3️⃣ After at least two players have joined, start the game with /start\n\n"
+        await send_private_message(player_id,
+    START_TEXT = "Follow these steps:"
+            "1️⃣ Add this bot to a group"
+            "2️⃣ In the group, start a new game with /new or join an already running game with /join"
+            "3️⃣ After at least two players have joined, start the game with /start"
             "🃏 Type @Merciless_UnoBot into your chat box and hit space, or click the 'via @Merciless_UnoBot' text next to messages. "
             "You will see your cards (some greyed out), any extra options like drawing, to see the current game state write /turn_order. "
-            "The greyed out cards are those you cannot play at the moment. Tap an option to execute the selected action.\n\n"
+            "The greyed out cards are those you cannot play at the moment. Tap an option to execute the selected action."
             "Players can join the game at any time. To leave a game, use /leave. If a player takes more than 90 seconds to play, "
-            "you can use /skip to skip that player. Use /notify_me to receive a private message when a new game is started.\n\n"
-            "⚙️ Other settings: /settings\n\n"
-            "👑 Other commands (only game creator or admin):\n"
-            "/close - Close lobby\n"
-            "/open - Open lobby\n"
-            "/kill - Terminate the game\n"
+            "you can use /skip to skip that player. Use /notify_me to receive a private message when a new game is started."
+            "⚙️ Other settings: /settings"
+            "👑 Other commands (only game creator or admin):"
+            "/close - Close lobby"
+            "/open - Open lobby"
+            "/kill - Terminate the game"
             "/kick - Select a player to kick by replying to him or her")
 
 async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -147,7 +150,8 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # Bot Setup
-application = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+app = Application.builder().token(TOKEN).build()
+app.job_queue.scheduler.configure(timezone=pytz.UTC)
 application.add_handler(CommandHandler("new", new_game))
 application.add_handler(CommandHandler("join", join_game))
 application.add_handler(CommandHandler("start", start_game))
