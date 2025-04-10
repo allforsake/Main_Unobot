@@ -1,6 +1,14 @@
 import pytz
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram import (
+    Update,
+    InlineQueryResultCachedSticker,
+)
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    InlineQueryHandler,
+)
 import openpyxl
 from openpyxl import Workbook
 import os
@@ -9,16 +17,18 @@ from card import *
 
 load_dotenv()
 
-TOKEN = os.getenv('TOKEN')
+TOKEN = os.getenv("TOKEN")
 
-STATS_FILE = 'uno_game_stats.xlsx'
+STATS_FILE = "uno_game_stats.xlsx"
 MIN_PLAYERS_COUNT = 2
 
 # Якщо файл не існує, створюємо новий
 if not os.path.exists(STATS_FILE):
     wb = Workbook()
     ws = wb.active
-    ws.append(['Game ID', 'Player', 'Games Played', 'Wins', 'Cards Played'])  # заголовки
+    ws.append(
+        ["Game ID", "Player", "Games Played", "Wins", "Cards Played"]
+    )  # заголовки
     wb.save(STATS_FILE)
 
 # In-memory data (in production, replace with a database)
@@ -26,10 +36,12 @@ games = {}  # chat_id: game_data
 user_settings = {}  # user_id: settings
 user_stats = {}  # user_id: stats
 
+
 # Helper functions (simplified)
 def is_admin(user_id, chat_id):
     # In real use, check admin status properly
     return True
+
 
 def get_game(chat_id):
     return games.get(chat_id)
@@ -37,14 +49,16 @@ def get_game(chat_id):
 def save_game_stats(player_id, game_id, stats):
     wb = openpyxl.load_workbook(STATS_FILE)
     ws = wb.active
-    ws.append([game_id, player_id, stats['games'], stats['wins'], stats['cards']])
+    ws.append([game_id, player_id, stats["games"], stats["wins"], stats["cards"]])
     wb.save(STATS_FILE)
+
 
 async def send_private_message(user_id, text):
     try:
         await app.bot.send_message(chat_id=user_id, text=text)
     except:
         pass
+
 
 # Command Handlers
 async def new(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,20 +84,25 @@ async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not game:
         await update.message.reply_text("No game to join. Use /new to create one.")
         return
-    if not game['open']:
+    if not game["open"]:
         await update.message.reply_text("Game lobby is closed.")
         return
-    if user_id not in game['players']:
-        game['players'].append(user_id)
-        await update.message.reply_text(f"{update.effective_user.first_name} joined the game!")
+    if user_id not in game["players"]:
+        game["players"].append(user_id)
+        await update.message.reply_text(
+            f"{update.effective_user.first_name} joined the game!"
+        )
     else:
         await update.message.reply_text("You already joined.")
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     game = get_game(chat_id)
     if chat_id in games and len(games[chat_id]["players"]) < MIN_PLAYERS_COUNT:
-        await update.message.reply_text("Not enough players to start the game, need at least 4 players to start.")
+        await update.message.reply_text(
+            "Not enough players to start the game, need at least 4 players to start."
+        )
         return
         game['turn_order'] = list(game['players'])
     await update.message.reply_text("START_TEXT")
@@ -113,8 +132,8 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     game = get_game(chat_id)
-    if game and user_id in game['players']:
-        game['players'].remove(user_id)
+    if game and user_id in game["players"]:
+        game["players"].remove(user_id)
         await update.message.reply_text("You left the game.")
     else:
         await update.message.reply_text("You're not in a game.")
@@ -128,29 +147,37 @@ async def turn_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Формуємо повідомлення про поточного гравця та кількість карт
     player_status = []
-    for player_id in game['players']:
+    for player_id in game["players"]:
         player_name = f"Player {game['players'].index(player_id) + 1}"  # Placeholder for player name
-        player_status.append(f"{player_name} ({len(game['players'])} cards)")  # Replace with actual card count
+        player_status.append(
+            f"{player_name} ({len(game['players'])} cards)"
+        )  # Replace with actual card count
 
     turn_order_text = " -> ".join(player_status)
     current_player = f"Current player: Player {game['turn_order'][0]} (@{game['turn_order'][0]})"  # Replace with actual player tag
     last_card = "💛4"  # Placeholder for last card played
 
-    await update.message.reply_text(f"{current_player}\nLast card: {last_card}\nPlayers: {turn_order_text}")
+    await update.message.reply_text(
+        f"{current_player}\nLast card: {last_card}\nPlayers: {turn_order_text}"
+    )
+
 
 async def save_game_stats(player_id, game_id, stats):
     wb = openpyxl.load_workbook(STATS_FILE)
     ws = wb.active
-    ws.append([game_id, player_id, stats['games'], stats['wins'], stats['cards']])
+    ws.append([game_id, player_id, stats["games"], stats["wins"], stats["cards"]])
     wb.save(STATS_FILE)
 
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await send_private_message(update.effective_user.id, "Settings (placeholder). Enable stats here.")
+    await send_private_message(
+        update.effective_user.id, "Settings (placeholder). Enable stats here."
+    )
+
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    stats = user_stats.get(user_id, {'games': 0, 'wins': 0, 'cards': 0})
-    percent = (stats['wins'] / stats['games'] * 100) if stats['games'] > 0 else 0
+    stats = user_stats.get(user_id, {"games": 0, "wins": 0, "cards": 0})
+    percent = (stats["wins"] / stats["games"] * 100) if stats["games"] > 0 else 0
     await update.message.reply_text(
         f"Games Played: {stats['games']}\nWins: {stats['wins']} ({percent:.2f}%)\nCards Played: {stats['cards']}"
     )
