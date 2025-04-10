@@ -14,6 +14,7 @@ from openpyxl import Workbook
 import os
 from dotenv import load_dotenv
 from card import *
+from deck import *
 
 load_dotenv()
 
@@ -46,6 +47,15 @@ def is_admin(user_id, chat_id):
 def get_game(chat_id):
     return games.get(chat_id)
 
+
+def get_game_by_player(user_id):
+    for game in games:
+        game = get_game(game)
+        if user_id in game["players"]:
+            return game
+    return None
+
+
 def save_game_stats(player_id, game_id, stats):
     wb = openpyxl.load_workbook(STATS_FILE)
     ws = wb.active
@@ -68,14 +78,16 @@ async def new(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Game already in progress.")
         return
     games[chat_id] = {
-        'creator': user_id,
-        'players': [user_id],
-        'open': True,
-        'turn_order': [],
-        'direction': 'clockwise',
-        'game_id': chat_id
+        "creator": user_id,
+        "players": [user_id],
+        "open": True,
+        "turn_order": [],
+        "direction": "clockwise",
+        "game_id": chat_id,
+        "hands": {},
     }
     await update.message.reply_text("New UNO game created! Use /join to participate.")
+
 
 async def join(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -104,14 +116,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Not enough players to start the game, need at least 4 players to start."
         )
         return
-        game['turn_order'] = list(game['players'])
     await update.message.reply_text("START_TEXT")
     if chat_id in games and len(games[chat_id]["players"]) >= MIN_PLAYERS_COUNT:
         await update.message.reply_text("Game started!")
+        game["turn_order"] = list(game["players"])
+
+    deck = Deck()
+    deck._fill_classic_()
 
     # Send instructions to each player privately
-    for player_id in game['players']:
-        await send_private_message(player_id,
+    for player_id in game["players"]:
+        await send_private_message(
+            player_id,
             "Follow these steps:"
             "1️⃣ Add this bot to a group"
             "2️⃣ In the group, start a new game with /new or join an already running game with /join"
@@ -126,7 +142,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/close - Close lobby"
             "/open - Open lobby"
             "/kill - Terminate the game"
-            "/kick - Select a player to kick by replying to him or her")
+            "/kick - Select a player to kick by replying to him or her",
+        )
+
+        game["hands"][player_id] = []
+        for _ in range(5):
+            game["hands"][player_id].append(deck.draw())
+
+    print(game)
+
 
 async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -137,6 +161,7 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("You left the game.")
     else:
         await update.message.reply_text("You're not in a game.")
+
 
 async def turn_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -168,6 +193,7 @@ async def save_game_stats(player_id, game_id, stats):
     ws.append([game_id, player_id, stats["games"], stats["wins"], stats["cards"]])
     wb.save(STATS_FILE)
 
+
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_private_message(
         update.effective_user.id, "Settings (placeholder). Enable stats here."
@@ -182,6 +208,22 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Games Played: {stats['games']}\nWins: {stats['wins']} ({percent:.2f}%)\nCards Played: {stats['cards']}"
     )
 
+
+async def show_hand(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.inline_query.from_user.id
+    game = get_game_by_player(user_id)
+    if not game:
+        return
+    if user_id not in game["hands"]:
+        return
+    hand: list[Card] = game["hands"][user_id]
+    result: list[InlineQueryResultCachedSticker] = []
+    for card in hand:
+        print(STICKERS[str(card)])
+        result.append(InlineQueryResultCachedSticker(str(card), STICKERS[str(card)]))
+    await update.inline_query.answer(result)
+
+
 # Bot Setup
 app = ApplicationBuilder().token(TOKEN).build()
 app.job_queue.scheduler.configure(timezone=pytz.UTC)
@@ -193,5 +235,7 @@ app.add_handler(CommandHandler("turn_order", turn_order))
 app.add_handler(CommandHandler("settings", settings))
 app.add_handler(CommandHandler("stats", stats))
 
-if __name__ == '__main__':
+app.add_handler(InlineQueryHandler(show_hand))
+
+if __name__ == "__main__":
     app.run_polling()
